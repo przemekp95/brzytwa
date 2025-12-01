@@ -80,3 +80,8 @@
 # Lock files
 package-lock.json text eol=lf
 yarn.lock text eol=lf
+
+# Explicit mobile app files - force text mode
+mobile/eisenhower-matrix/App.js text eol=lf
+mobile/eisenhower-matrix/i18n/translations.js text eol=lf
+mobile/eisenhower-matrix/components/LanguageSwitcher.js text eol=lf
