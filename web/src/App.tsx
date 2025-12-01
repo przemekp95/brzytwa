@@ -11,11 +11,15 @@ interface Task {
 }
 
 function App() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([
+    { _id: '1', title: 'Przykładowe zadanie pilne i ważne', description: 'Zadanie w kwadrancie Do Now', urgent: true, important: true },
+    { _id: '2', title: 'Pilne ale nieważne', description: 'Zadanie w kwadrancie Decide', urgent: true, important: false },
+    { _id: '3', title: 'Nieważne ale ważne', description: 'Zadanie w kwadrancie Delegate', urgent: false, important: true },
+  ]);
 
-  useEffect(() => {
-    fetchTasks();
-  }, []);
+  // useEffect(() => {
+  //   fetchTasks();
+  // }, []);
 
   const fetchTasks = async () => {
     try {
@@ -28,17 +32,22 @@ function App() {
   };
 
   const addTask = async (newTask: Omit<Task, '_id'>) => {
-    try {
-      const response = await fetch('http://localhost:3001/tasks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTask),
-      });
-      const data = await response.json();
-      setTasks([...tasks, data]);
-    } catch (error) {
-      console.error('Failed to add task:', error);
-    }
+    // Mock - create task locally
+    const mockId = Date.now().toString();
+    const mockTask: Task = { _id: mockId, ...newTask };
+    setTasks([...tasks, mockTask]);
+    console.log('Added task:', mockTask);
+    // try {
+    //   const response = await fetch('http://localhost:3001/tasks', {
+    //     method: 'POST',
+    //     headers: { 'Content-Type': 'application/json' },
+    //     body: JSON.stringify(newTask),
+    //   });
+    //   const data = await response.json();
+    //   setTasks([...tasks, data]);
+    // } catch (error) {
+    //   console.error('Failed to add task:', error);
+    // }
   };
 
   const deleteTask = async (id: string) => {

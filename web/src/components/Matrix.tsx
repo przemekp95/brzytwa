@@ -140,7 +140,7 @@ function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, delay: 0.2 }}
         className="relative z-10 grid grid-cols-2 grid-rows-2 gap-4 bg-white/20 backdrop-blur-sm rounded-lg p-4"
-        style={{ width: '800px', height: '600px' }}
+        style={{ width: '800px', height: '600px', transformStyle: 'preserve-3d' }}
       >
         {quadrants.map((quad, index) => (
           <motion.div
@@ -156,45 +156,43 @@ function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
                 <div
                   ref={provided.innerRef}
                   {...provided.droppableProps}
-                  className="flex-1 overflow-y-auto"
+                  className="flex-1 min-h-0"
                 >
-                  <AnimatePresence>
-                    {tasks.filter(quad.filter).map((task, taskIndex) => (
-                      <Draggable key={task._id} draggableId={task._id} index={taskIndex}>
-                        {(provided, snapshot) => (
-                          <motion.div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            exit={{ opacity: 0, scale: 0.8 }}
-                            className={`bg-white/50 rounded p-2 mb-2 shadow-sm cursor-move ${
-                              snapshot.isDragging ? 'shadow-lg' : ''
-                            }`}
-                            drag={false}
-                            dragConstraints={undefined}
-                            onDragStart={undefined}
-                            onDragEnd={undefined}
-                            onDrag={undefined}
-                          >
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <h4 className="font-medium">{task.title}</h4>
-                                <p className="text-sm text-gray-600">{task.description}</p>
-                              </div>
-                              <button
-                                onClick={() => onDeleteTask(task._id)}
-                                className="ml-2 text-red-600 hover:text-red-800 opacity-50 hover:opacity-100"
-                              >
-                                ✕
-                              </button>
+                  {tasks.filter(quad.filter).map((task, taskIndex) => (
+                    <Draggable key={task._id} draggableId={task._id} index={taskIndex}>
+                      {(provided, snapshot) => (
+                      <div
+          className="bg-white/50 rounded p-2 mb-2 shadow-sm cursor-move"
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                        style={
+                          snapshot.isDragging
+                            ? {
+                                zIndex: 9999,
+                                opacity: 0.9,
+                                transform: provided.draggableProps.style?.transform,
+                                transition: 'none'
+                              }
+                            : {}
+                        }
+                      >
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <h4 className="font-medium">{task.title}</h4>
+                              <p className="text-sm text-gray-600">{task.description}</p>
                             </div>
-                          </motion.div>
-                        )}
-                      </Draggable>
-                    ))}
-                  </AnimatePresence>
+                            <button
+                              onClick={() => onDeleteTask(task._id)}
+                              className="ml-2 text-red-600 hover:text-red-800 opacity-50 hover:opacity-100"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))}
                   {provided.placeholder}
                 </div>
               )}
