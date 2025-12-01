@@ -4,6 +4,9 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Sphere } from '@react-three/drei';
 import { MeshStandardMaterial } from 'three';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
+import { classifyTask } from '../services/api';
+import AITools from './AITools';
+import { LangChainAnalysis } from '../services/api';
 
 interface Task {
   _id: string;
@@ -22,6 +25,8 @@ interface MatrixProps {
 
 function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
   const [newTask, setNewTask] = useState({ title: '', description: '', urgent: false, important: false });
+  const [showAITools, setShowAITools] = useState(false);
+  const [latestAnalysis, setLatestAnalysis] = useState<LangChainAnalysis | null>(null);
 
   const quadrants = [
     { key: 'do', label: 'Do Now', filter: (t: Task) => t.urgent && t.important, color: 'bg-red-500' },
@@ -30,24 +35,51 @@ function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
     { key: 'delete', label: 'Delete', filter: (t: Task) => !t.urgent && !t.important, color: 'bg-green-500' },
   ];
 
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const handleAnalysisComplete = (analysis: LangChainAnalysis) => {
+    setLatestAnalysis(analysis);
+    // Optional: Auto-fill the task form with AI's suggested quadrant
+    const suggestedQuadrant = analysis.langchain_analysis.quadrant || analysis.rag_classification.quadrant;
+    const quadrantToBool = (quad: number) => ({
+      urgent: quad === 0 || quad === 1,
+      important: quad === 0 || quad === 2
+    });
+
+    if (suggestedQuadrant >= 0) {
+      const boolState = quadrantToBool(suggestedQuadrant);
+      setNewTask(prev => ({ ...prev, ...boolState }));
+    }
+  };
+
   const predictQuadrant = async (title: string) => {
+    if (!title.trim()) return;
+
+    setAiLoading(true);
     try {
-      const response = await fetch(`http://localhost:8000/classify?title=${encodeURIComponent(title)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setNewTask({ ...newTask, urgent: data.urgent, important: data.important });
-      } else {
-        throw new Error('API error');
-      }
+      const result = await classifyTask(title);
+      setNewTask({
+        ...newTask,
+        urgent: result.urgent,
+        important: result.important
+      });
     } catch (error) {
       console.error('Failed to fetch AI prediction:', error);
-      // Fallback to rule-based if AI unavailable
+      // Enhanced fallback with Polish keywords
       const lowerTitle = title.toLowerCase();
-      const urgentWords = ['urgent', 'pilny', 'pilne', 'teraz', 'today', 'dzisiaj', 'now', 'deadline', 'termin', 'gorący', 'krytyczny', 'natychmiast', 'asap'];
+      const urgentWords = ['urgent', 'pilny', 'pilne', 'teraz', 'today', 'dzisiaj', 'natychmiast', 'asap', 'deadline', 'termin', 'krytyczny', 'gorący', 'pilnego', 'teraz'];
+      const importantWords = ['important', 'ważny', 'ważne', 'projekt', 'kluczowy', 'strategiczny', 'biznes', 'firma', 'główny', 'znaczenie', 'decydujący'];
+
       const hasUrgency = urgentWords.some(word => lowerTitle.includes(word));
-      const importantWords = ['important', 'ważny', 'ważne', 'projekt', 'kluczowy', 'strategiczny', 'biznes', 'firma', 'główny'];
       const hasImportance = importantWords.some(word => lowerTitle.includes(word));
-      setNewTask({ ...newTask, urgent: hasUrgency, important: hasImportance });
+
+      setNewTask({
+        ...newTask,
+        urgent: hasUrgency,
+        important: hasImportance
+      });
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -212,17 +244,36 @@ function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
           />
           Important
         </label>
-        <button
-          type="button"
-          onClick={() => predictQuadrant(newTask.title)}
-          className="w-full mb-2 bg-purple-500 text-white py-2 rounded hover:bg-purple-600"
-        >
-          AI Suggest Quadrant
-        </button>
+        <div className="flex gap-2 mb-2">
+          <button
+            type="button"
+            onClick={() => predictQuadrant(newTask.title)}
+            disabled={aiLoading}
+            className="flex-1 bg-purple-500 text-white py-2 rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {aiLoading ? '🤖 AI analizuje...' : '🤖 AI Suggest Quadrant'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAITools(true)}
+            className="bg-gradient-to-r from-blue-600 to-teal-600 text-white py-2 px-4 rounded hover:from-blue-700 hover:to-teal-700"
+          >
+            🛠️ AI Tools
+          </button>
+        </div>
         <button type="submit" className="w-full bg-white text-blue-600 py-2 rounded hover:bg-gray-100">
           Add Task
         </button>
       </motion.form>
+
+      {/* AI Tools Modal */}
+      {showAITools && (
+        <AITools
+          taskTitle={newTask.title}
+          onClose={() => setShowAITools(false)}
+          onAnalysisComplete={handleAnalysisComplete}
+        />
+      )}
     </div>
     </DragDropContext>
   );
