@@ -5,6 +5,7 @@ import ImageUpload from './ai/ImageUpload';
 import BatchAnalysis from './ai/BatchAnalysis';
 import AIManagement from './ai/AIManagement';
 import { LangChainAnalysis, OCRResult, BatchAnalysisResult } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface AIToolsProps {
   taskTitle: string;
@@ -13,31 +14,32 @@ interface AIToolsProps {
 }
 
 function AITools({ taskTitle, onClose, onAnalysisComplete }: AIToolsProps) {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'langchain' | 'ocr' | 'batch' | 'manage'>('langchain');
 
   const tools = [
     {
       id: 'langchain' as const,
-      title: '🧠 Zaawansowana Analiza',
-      description: 'LangChain + RAG reasoning',
+      title: t('ai.tabs.langchain'),
+      description: t('ai.tabs.langchain.desc'),
       component: AdvancedAIAnalysis,
     },
     {
       id: 'ocr' as const,
-      title: '📷 OCR z Obrazów',
-      description: 'Wyciągnij zadania z fotografii',
+      title: t('ai.tabs.ocr'),
+      description: t('ai.tabs.ocr.desc'),
       component: ImageUpload,
     },
     {
       id: 'batch' as const,
-      title: '📊 Wsadowa Analiza',
-      description: 'Analizuj wiele zadań naraz',
+      title: t('ai.tabs.batch'),
+      description: t('ai.tabs.batch.desc'),
       component: BatchAnalysis,
     },
     {
       id: 'manage' as const,
-      title: '🛠️ Zarządzanie AI',
-      description: 'Trening i statystyki modelu',
+      title: t('ai.tabs.manage'),
+      description: t('ai.tabs.manage.desc'),
       component: AIManagement,
     }
   ];
@@ -113,8 +115,8 @@ function AITools({ taskTitle, onClose, onAnalysisComplete }: AIToolsProps) {
         <div className="p-6 border-b border-white/20">
           <div className="flex justify-between items-center">
             <div>
-              <h2 className="text-2xl font-bold text-white">🧠 Narzędzia AI</h2>
-              <p className="text-white/80">Zaawansowane funkcjonalności sztucznej inteligencji</p>
+              <h2 className="text-2xl font-bold text-white">{t('ai.tools.title')}</h2>
+              <p className="text-white/80">{t('ai.tools.subtitle')}</p>
             </div>
             <button
               onClick={onClose}

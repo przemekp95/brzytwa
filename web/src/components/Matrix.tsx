@@ -7,6 +7,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { classifyTask } from '../services/api';
 import AITools from './AITools';
 import { LangChainAnalysis } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface Task {
   _id: string;
@@ -24,15 +25,16 @@ interface MatrixProps {
 }
 
 function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
+  const { t } = useLanguage();
   const [newTask, setNewTask] = useState({ title: '', description: '', urgent: false, important: false });
   const [showAITools, setShowAITools] = useState(false);
   const [latestAnalysis, setLatestAnalysis] = useState<LangChainAnalysis | null>(null);
 
   const quadrants = [
-    { key: 'do', label: 'Do Now', filter: (t: Task) => t.urgent && t.important, color: 'bg-red-500' },
-    { key: 'decide', label: 'Schedule', filter: (t: Task) => t.urgent && !t.important, color: 'bg-yellow-500' },
-    { key: 'delegate', label: 'Delegate', filter: (t: Task) => !t.urgent && t.important, color: 'bg-blue-500' },
-    { key: 'delete', label: 'Delete', filter: (t: Task) => !t.urgent && !t.important, color: 'bg-green-500' },
+    { key: 'do', label: t('matrix.do'), filter: (t: Task) => t.urgent && t.important, color: 'bg-red-500' },
+    { key: 'decide', label: t('matrix.schedule'), filter: (t: Task) => t.urgent && !t.important, color: 'bg-yellow-500' },
+    { key: 'delegate', label: t('matrix.delegate'), filter: (t: Task) => !t.urgent && t.important, color: 'bg-blue-500' },
+    { key: 'delete', label: t('matrix.delete'), filter: (t: Task) => !t.urgent && !t.important, color: 'bg-green-500' },
   ];
 
   const [aiLoading, setAiLoading] = useState(false);
@@ -209,17 +211,17 @@ function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
         onSubmit={handleSubmit}
         className="relative z-10 mt-8 bg-white/10 backdrop-blur-sm rounded-lg p-6 max-w-md mx-auto"
       >
-        <h3 className="text-xl font-semibold text-white mb-4">Add New Task</h3>
+        <h3 className="text-xl font-semibold text-white mb-4">{t('form.addTask')}</h3>
         <input
           type="text"
-          placeholder="Title"
+          placeholder={t('form.title')}
           value={newTask.title}
           onChange={e => setNewTask({...newTask, title: e.target.value})}
           className="w-full p-2 mb-2 rounded border border-white/50 bg-white/20 text-white placeholder:text-white/70"
           required
         />
         <textarea
-          placeholder="Description"
+          placeholder={t('form.description')}
           value={newTask.description}
           onChange={e => setNewTask({...newTask, description: e.target.value})}
           className="w-full p-2 mb-2 rounded border border-white/50 bg-white/20 text-white placeholder:text-white/70"
@@ -231,7 +233,7 @@ function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
             onChange={e => setNewTask({...newTask, urgent: e.target.checked})}
             className="mr-2"
           />
-          Urgent
+          {t('form.urgent')}
         </label>
         <label className="flex items-center mb-4 text-white">
           <input
@@ -240,7 +242,7 @@ function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
             onChange={e => setNewTask({...newTask, important: e.target.checked})}
             className="mr-2"
           />
-          Important
+          {t('form.important')}
         </label>
         <div className="flex gap-2 mb-2">
           <button
@@ -249,18 +251,18 @@ function Matrix({ tasks, onAddTask, onUpdateTask, onDeleteTask }: MatrixProps) {
             disabled={aiLoading}
             className="flex-1 bg-purple-500 text-white py-2 rounded hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {aiLoading ? '🤖 AI analizuje...' : '🤖 AI Suggest Quadrant'}
+            {aiLoading ? t('ai.suggesting') : t('ai.suggest')}
           </button>
           <button
             type="button"
             onClick={() => setShowAITools(true)}
             className="bg-gradient-to-r from-blue-600 to-teal-600 text-white py-2 px-4 rounded hover:from-blue-700 hover:to-teal-700"
           >
-            🛠️ AI Tools
+            {t('ai.tools')}
           </button>
         </div>
         <button type="submit" className="w-full bg-white text-blue-600 py-2 rounded hover:bg-gray-100">
-          Add Task
+          {t('form.submit')}
         </button>
       </motion.form>
 
