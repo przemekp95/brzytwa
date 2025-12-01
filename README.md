@@ -1,9 +1,9 @@
-# Occam's Razor Matrix (Eisenhower Priority Matrix)
+### Dependencies
 
-Simple overview of use/purpose: A web and Android app for managing tasks using the Eisenhower Matrix, with stunning visualizations and AI-powered suggestions.
-
-## Description
-
+- Node.js (version 18 or higher)
+- npm or yarn
+- Python 3.8+ with venv
+- MongoDB
 An in-depth paragraph about your project and overview of use: This application implements the Eisenhower Matrix (also known as Occam's Razor) to help users prioritize tasks based on urgency and importance. The web version features smooth animations and 3D visualizations, while the Android app maintains full functionality. AI-driven networks provide smart task suggestions to optimize productivity.
 
 ## Getting Started
@@ -15,6 +15,7 @@ An in-depth paragraph about your project and overview of use: This application i
 - Python 3.8+ with venv
 - MongoDB
 - Expo CLI for mobile development
+- Docker and Docker Compose (optional, for containerized deployment)
 
 ### Installing
 
@@ -28,6 +29,7 @@ An in-depth paragraph about your project and overview of use: This application i
 - AI service: cd backend-ai && python -m uvicorn main:app --reload
 - Web: cd web && npm run dev (starts Vite server)
 - Mobile: cd mobile && expo start
+- Docker (all services): docker-compose up --build
 
 ## Help
 
