@@ -3,3 +3,11 @@ uvicorn
 scikit-learn
 nltk
 joblib
+sentence-transformers
+transformers
+torch
+chromadb
+pandas
+langchain
+opencv-python
+pytesseract
