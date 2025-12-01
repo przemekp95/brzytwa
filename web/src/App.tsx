@@ -41,6 +41,17 @@ function App() {
     }
   };
 
+  const deleteTask = async (id: string) => {
+    try {
+      await fetch(`http://localhost:3001/tasks/${id}`, {
+        method: 'DELETE',
+      });
+      setTasks(tasks.filter(t => t._id !== id));
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-500 to-purple-600 p-4">
       <motion.header
@@ -54,7 +65,7 @@ function App() {
       </motion.header>
       <Matrix tasks={tasks} onAddTask={addTask} onUpdateTask={(id, updated) => {
         setTasks(tasks.map(t => t._id === id ? {...t, ...updated} : t));
-      }} />
+      }} onDeleteTask={deleteTask} />
       <div className="mt-4 text-center text-white">
         <h3 className="text-xl mb-2">AI Prediction</h3>
         <p>Predicted next action based on your tasks: {

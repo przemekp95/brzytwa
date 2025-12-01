@@ -3,3 +3,8 @@ uvicorn
 scikit-learn
 nltk
 joblib
+sentence-transformers
+transformers
+torch
+chromadb
+pandas
