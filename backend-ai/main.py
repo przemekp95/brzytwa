@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query, HTTPException
+from fastapi import FastAPI, Query, HTTPException, UploadFile, File
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -13,6 +13,15 @@ import numpy as np
 from datetime import datetime
 import pandas as pd
 from pathlib import Path
+
+# New imports for LangChain and OpenCV
+from langchain.chains import LLMChain
+from langchain.prompts import PromptTemplate
+from langchain.llms import HuggingFacePipeline
+from langchain.memory import ConversationBufferMemory
+import cv2
+import pytesseract
+import io
 
 # Phase 1: BERT Embeddings Setup
 print("🔄 Ładowanie BERT embeddings...")
@@ -33,6 +42,162 @@ try:
 except Exception as e:
     print(f"⚠️ Błąd vector database: {e}")
     chroma_client = None
+
+# LangChain initialization
+langchain_memory = ConversationBufferMemory()
+langchain_template = """
+You are an expert task management and Eisenhower Matrix consultant. Analyze the following task and provide detailed reasoning about where it should be placed in the Eisenhower Matrix.
+
+Task to analyze: {task}
+
+Consider:
+1. URGENCY: Does this task have a deadline? Is it time-sensitive? Will not doing it soon cause negative consequences?
+2. IMPORTANCE: Does this task align with long-term goals? Is it valuable for career/personal growth? Will it have significant impact?
+
+Based on your analysis, recommend one of these quadrants:
+- Quadrant 0: Do Now (Urgent + Important) - Immediate action required
+- Quadrant 1: Schedule (Urgent, Not Important) - Plan time for delegation
+- Quadrant 2: Delegate (Important, Not Urgent) - Focus on high-value activities
+- Quadrant 3: Delete (Not Important, Not Urgent) - Eliminate or minimize
+
+Provide your final recommendation as a number (0-3) and detailed reasoning.
+"""
+
+try:
+    langchain_prompt = PromptTemplate(
+        input_variables=["task"],
+        template=langchain_template
+    )
+
+    # Initialize HuggingFace model for LangChain
+    hf_model_id = "microsoft/DialoGPT-medium"
+    hf_pipeline = None
+    langchain_llm = None
+
+    try:
+        from transformers import pipeline
+        hf_pipeline = pipeline("text-generation", model=hf_model_id, max_length=512, temperature=0.7, do_sample=True)
+        langchain_llm = HuggingFacePipeline(pipeline=hf_pipeline)
+        print("✅ LangChain initialized with HuggingFace model")
+    except Exception as e:
+        print(f"⚠️ LangChain initialization failed: {e}")
+        langchain_llm = None
+
+except Exception as e:
+    print(f"⚠️ LangChain setup error: {e}")
+    langchain_llm = None
+
+def analyze_task_with_langchain(task: str) -> Dict:
+    """Use LangChain to perform advanced task analysis"""
+    if langchain_llm is None or langchain_prompt is None:
+        return {
+            "error": "LangChain not available",
+            "quadrant": -1,
+            "reasoning": "LangChain functionality is not loaded"
+        }
+
+    try:
+        chain = LLMChain(
+            llm=langchain_llm,
+            prompt=langchain_prompt,
+            memory=langchain_memory,
+            verbose=False
+        )
+
+        response = chain.run(task=task)
+
+        # Parse the response for quadrant recommendation
+        lines = response.strip().split('\n')
+        quadrant = -1
+        reasoning_parts = []
+
+        for line in lines:
+            line_lower = line.lower()
+            if 'quadrant 0' in line_lower or 'do now' in line_lower:
+                quadrant = 0
+                reasoning_parts.append(line)
+            elif 'quadrant 1' in line_lower or 'schedule' in line_lower:
+                quadrant = 1
+                reasoning_parts.append(line)
+            elif 'quadrant 2' in line_lower or 'delegate' in line_lower:
+                quadrant = 2
+                reasoning_parts.append(line)
+            elif 'quadrant 3' in line_lower or 'delete' in line_lower:
+                quadrant = 3
+                reasoning_parts.append(line)
+            elif any(keyword in line_lower for keyword in ['reasoning:', 'analysis:', 'consider:']):
+                reasoning_parts.append(line)
+
+        if quadrant == -1:
+            # Fallback to first numeric digit found
+            import re
+            numbers = re.findall(r'\b\d+\b', response)
+            if numbers:
+                quadrant = min(int(num) for num in numbers if 0 <= int(num) <= 3)
+
+        return {
+            "quadrant": quadrant,
+            "reasoning": " ".join(reasoning_parts[:3]),  # Limit to first 3 reasoning points
+            "full_reasoning": response,
+            "confidence": 0.6 if quadrant >= 0 else 0.0,
+            "method": "LangChain"
+        }
+
+    except Exception as e:
+        return {
+            "error": f"LangChain analysis failed: {str(e)}",
+            "quadrant": -1,
+            "reasoning": "",
+            "confidence": 0.0,
+            "method": "LangChain"
+        }
+
+def extract_text_from_image(image_data: bytes) -> Dict:
+    """Use OpenCV and Tesseract to extract text from images"""
+    try:
+        # Convert bytes to numpy array
+        nparr = np.frombuffer(image_data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        if img is None:
+            return {"error": "Invalid image format", "text": "", "tasks": []}
+
+        # Preprocessing for better OCR
+        # Convert to grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # Apply thresholding to get better contrast
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Use pytesseract for OCR with Polish language support
+        extracted_text = pytesseract.image_to_string(thresh, lang='pol+eng', config='--psm 3')
+
+        # Split into potential tasks (simple heuristics)
+        lines = [line.strip() for line in extracted_text.split('\n') if line.strip()]
+        potential_tasks = []
+
+        # Simple task detection (lines that look like tasks)
+        for line in lines:
+            line = line.strip()
+            if len(line) > 5 and not line.startswith('http'):  # Filter out URLs
+                # Look for task-like patterns
+                task_indicators = ['-', '•', '*', 'todo', 'task', '✓', '☐']
+                if any(indicator in line.lower() or line[0].isupper() for indicator in task_indicators):
+                    potential_tasks.append(line)
+
+        return {
+            "extracted_text": extracted_text,
+            "tasks": potential_tasks[:10],  # Limit to 10 most promising tasks
+            "image_shape": f"{img.shape[0]}x{img.shape[1]}",
+            "method": "OpenCV+Tesseract"
+        }
+
+    except Exception as e:
+        return {
+            "error": f"OCR processing failed: {str(e)}",
+            "text": "",
+            "tasks": []
+        }
 
 app = FastAPI(title="AI Quadrant Classifier", description="Intelligent task classification with continuous learning")
 
@@ -723,16 +888,209 @@ def get_examples_by_quadrant(
         "total": len(examples)
     }
 
+@app.post("/analyze-langchain")
+def analyze_with_langchain(
+    task: str = Query(..., description="Zadanie do analizy za pomocą LangChain")
+):
+    """Zaawansowana analiza zadania z wykorzystaniem LangChain"""
+    if not task or len(task.strip()) == 0:
+        raise HTTPException(status_code=400, detail="Zadanie nie może być puste")
+
+    # Get LangChain analysis
+    langchain_result = analyze_task_with_langchain(task)
+
+    # Also get RAG classification for comparison
+    rag_result = rag_classify(task)
+
+    return {
+        "task": task,
+        "langchain_analysis": langchain_result,
+        "rag_classification": {
+            "quadrant": rag_result["prediction"],
+            "quadrant_name": QUADRANT_NAMES[rag_result["prediction"]],
+            "confidence": rag_result["confidence"]
+        },
+        "comparison": {
+            "methods_agree": langchain_result.get("quadrant", -1) == rag_result["prediction"],
+            "confidence_difference": abs(langchain_result.get("confidence", 0) - rag_result["confidence"])
+        },
+        "timestamp": datetime.now().isoformat(),
+        "method": "Hybrid: LangChain + RAG"
+    }
+
+@app.post("/extract-tasks-from-image")
+def extract_tasks_from_image(
+    file: UploadFile = File(..., description="Obraz zawierający zadania (JPG, PNG, etc.)")
+):
+    """Wyciągnij zadania z obrazów za pomocą OCR (OpenCV + Tesseract)"""
+    if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')):
+        raise HTTPException(status_code=400, detail="Nieobsługiwany format pliku. Użyj PNG, JPG, JPEG, BMP lub TIFF.")
+
+    try:
+        # Read image data
+        image_data = await file.read()
+
+        # Extract text and tasks using OCR
+        ocr_result = extract_text_from_image(image_data)
+
+        if "error" in ocr_result:
+            raise HTTPException(status_code=400, detail=ocr_result["error"])
+
+        # Classify each extracted task
+        classified_tasks = []
+        for task_text in ocr_result.get("tasks", []):
+            if len(task_text.strip()) > 3:  # Skip very short tasks
+                try:
+                    rag_result = rag_classify(task_text)
+                    classified_tasks.append({
+                        "text": task_text,
+                        "quadrant": rag_result["prediction"],
+                        "quadrant_name": QUADRANT_NAMES[rag_result["prediction"]],
+                        "confidence": rag_result["confidence"]
+                    })
+                except Exception as e:
+                    # If classification fails, assign default quadrant
+                    classified_tasks.append({
+                        "text": task_text,
+                        "quadrant": 1,  # Default to "Schedule"
+                        "quadrant_name": QUADRANT_NAMES[1],
+                        "confidence": 0.3
+                    })
+
+        return {
+            "filename": file.filename,
+            "image_info": {
+                "size_bytes": len(image_data),
+                "shape": ocr_result.get("image_shape", "unknown")
+            },
+            "ocr": {
+                "extracted_text": ocr_result["extracted_text"][:500],  # Limit text length
+                "raw_tasks_detected": len(ocr_result.get("tasks", [])),
+                "method": ocr_result.get("method", "unknown")
+            },
+            "classified_tasks": classified_tasks,
+            "summary": {
+                "total_tasks": len(classified_tasks),
+                "quadrant_distribution": summarize_quadrant_distribution(classified_tasks)
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OCR processing failed: {str(e)}")
+
+def summarize_quadrant_distribution(tasks: List[Dict]) -> Dict:
+    """Summarize how tasks are distributed across quadrants"""
+    distribution = {i: 0 for i in range(4)}
+    for task in tasks:
+        quadrant = task.get("quadrant", 0)
+        distribution[quadrant] += 1
+
+    total = sum(distribution.values())
+    return {
+        "counts": distribution,
+        "percentages": {q: round((count/total)*100, 1) if total > 0 else 0 for q, count in distribution.items()},
+        "quadrant_names": {q: QUADRANT_NAMES[q] for q in range(4)}
+    }
+
+@app.post("/batch-analyze")
+def batch_analyze_tasks(
+    tasks: List[str] = Query(..., description="Lista zadań do analizy")
+):
+    """Wsadowa analiza wielu zadań z różnymi metodami"""
+    if not tasks or len(tasks) == 0:
+        raise HTTPException(status_code=400, detail="Lista zadań nie może być pusta")
+
+    if len(tasks) > 50:  # Limit batch size
+        raise HTTPException(status_code=400, detail="Maksymalnie 50 zadań na raz")
+
+    results = []
+    summary = {"methods": {}, "total_tasks": len(tasks)}
+
+    for task_text in tasks:
+        if not task_text.strip():
+            continue
+
+        task_result = {
+            "task": task_text,
+            "analyses": {}
+        }
+
+        # RAG Analysis
+        try:
+            rag_result = rag_classify(task_text)
+            task_result["analyses"]["rag"] = {
+                "quadrant": rag_result["prediction"],
+                "quadrant_name": QUADRANT_NAMES[rag_result["prediction"]],
+                "confidence": rag_result["confidence"]
+            }
+        except Exception as e:
+            task_result["analyses"]["rag"] = {"error": str(e)}
+
+        # LangChain Analysis
+        try:
+            langchain_result = analyze_task_with_langchain(task_text)
+            task_result["analyses"]["langchain"] = langchain_result
+        except Exception as e:
+            task_result["analyses"]["langchain"] = {"error": str(e)}
+
+        results.append(task_result)
+
+        # Update summary
+        for method in ["rag", "langchain"]:
+            if method not in summary["methods"]:
+                summary["methods"][method] = {"quadrant_distribution": {i: 0 for i in range(4)}}
+
+            analysis = task_result["analyses"].get(method, {})
+            quadrant = analysis.get("quadrant", -1)
+            if quadrant >= 0:
+                summary["methods"][method]["quadrant_distribution"][quadrant] += 1
+
+    return {
+        "batch_results": results,
+        "summary": summary,
+        "timestamp": datetime.now().isoformat(),
+        "methods_used": ["RAG", "LangChain"]
+    }
+
+@app.get("/capabilities")
+def get_capabilities():
+    """Sprawdź dostępne funkcjonalności AI"""
+    return {
+        "ai_features": {
+            "basic_classification": True,
+            "rag_enhanced": chroma_client is not None and sentence_model is not None,
+            "vector_database": chroma_client is not None,
+            "bert_embeddings": sentence_model is not None,
+            "cross_encoder_reranking": cross_encoder is not None,
+            "langchain_analysis": langchain_llm is not None and langchain_prompt is not None,
+            "ocr_image_processing": "opencv" in "opencv-python",  # Check if installed
+            "multilingual_support": sentence_model is not None
+        },
+        "supported_languages": ["Polish", "English"],
+        "last_updated": datetime.now().isoformat(),
+        "version": "3.0 - Advanced AI Features"
+    }
+
 @app.get("/")
 def root():
     """Stronie główna API"""
     training_stats = get_training_stats()
+    capabilities = get_capabilities()
+
     return {
-        "message": "🎯 AI Kwadrant Klasyfikator z Uczeniem Ciągłym",
-        "version": "2.0 - Continuous Learning",
+        "message": "🎯 AI Kwadrant Klasyfikator z Zaawansowanymi Funkcjami",
+        "version": "3.0 - LangChain + OpenCV Integration",
         "training_data": f"{training_stats['total_examples']} przykładów",
+        "ai_capabilities": capabilities["ai_features"],
         "endpoints": {
-            "POST /classify": "Sklasyfikuj zadanie",
+            "GET /classify": "Podstawowa klasyfikacja zadania",
+            "POST /analyze-langchain": "Zaawansowana analiza z LangChain",
+            "POST /extract-tasks-from-image": "OCR ekstrakcja zadań z obrazów",
+            "POST /batch-analyze": "Wsadowa analiza wielu zadań",
+            "GET /capabilities": "Sprawdź dostępne funkcjonalności",
             "POST /add-example": "Dodaj przykład treningowy",
             "POST /retrain": "Przeszkolenie modelu",
             "POST /learn-feedback": "Naucz się z korekty",

@@ -26,6 +26,9 @@ RUN apt-get update \
         git \
         libffi-dev \
         libgomp1 \
+        tesseract-ocr \
+        tesseract-ocr-pol \
+        libtesseract-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && rm -rf /var/cache/apt/archives/* \

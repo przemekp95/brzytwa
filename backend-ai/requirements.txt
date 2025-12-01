@@ -8,3 +8,6 @@ transformers
 torch
 chromadb
 pandas
+langchain
+opencv-python
+pytesseract
